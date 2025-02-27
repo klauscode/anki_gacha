@@ -1,0 +1,36 @@
+{
+  "pullCost": 50,
+  "rewards": {
+    "newCard": 1,
+    "reviewCorrect": 5,
+    "reviewHard": 2,
+    "reviewWrong": 1,
+    "streak": {
+      "5": 5,
+      "10": 10,
+      "25": 25,
+      "50": 50,
+      "100": 100
+    }
+  },
+  "husbandoFolder": "C:/Users/Makoto/AppData/Roaming/Anki2/addons21/husbando_gacha/images",
+  "rarities": {
+    "common": {
+      "chance": 0.6,
+      "color": "#A0A0A0"
+    },
+    "rare": {
+      "chance": 0.3,
+      "color": "#4169E1"
+    },
+    "epic": {
+      "chance": 0.08,
+      "color": "#9932CC"
+    },
+    "legendary": {
+      "chance": 0.02,
+      "color": "#FFD700"
+    }
+  },
+  "showDuringReview": true
+}

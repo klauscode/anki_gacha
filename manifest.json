@@ -1,0 +1,8 @@
+{
+  "name": "Husbando Gacha",
+  "package": "husbando_gacha",
+  "version": "0.1.0",
+  "description": "Gacha game addon for Anki that rewards you with husbando cards for studying.",
+  "min_anki_version": "2.1.45",
+  "author": "Claude"
+}
