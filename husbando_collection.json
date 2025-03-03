@@ -1,8 +1,211 @@
 {
-  "collection": {},
-  "points": 40,
-  "login_streak": 1,
-  "last_login_date": "2025-02-27",
-  "achievements": {},
+  "collection": {
+    "Volcano.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Tomas.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 123,
+      "level": 3,
+      "hp": 100
+    },
+    "Bruce.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 15,
+      "level": 1,
+      "hp": 100
+    },
+    "Marcus.jpeg": {
+      "count": 2,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 10,
+      "level": 1,
+      "hp": 100
+    },
+    "Ruff.jpeg": {
+      "count": 2,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 10,
+      "level": 1,
+      "hp": 100
+    },
+    "Metro.png": {
+      "count": 2,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 10,
+      "level": 1,
+      "hp": 100
+    },
+    "Henrik.jpeg": {
+      "count": 1,
+      "rarity": "rare",
+      "favorite": false,
+      "xp": 129,
+      "level": 4,
+      "hp": 100
+    },
+    "Artic.jpeg": {
+      "count": 2,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 10,
+      "level": 1,
+      "hp": 100
+    },
+    "Mark_L.jpeg": {
+      "count": 2,
+      "rarity": "rare",
+      "favorite": false,
+      "xp": 25,
+      "level": 1,
+      "hp": 100
+    },
+    "Raymond.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Viktor.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Azov.png": {
+      "count": 1,
+      "rarity": "epic",
+      "favorite": false,
+      "xp": 5,
+      "level": 2,
+      "hp": 100
+    },
+    "Dominic.jpeg": {
+      "count": 2,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 54,
+      "level": 1,
+      "hp": 90
+    },
+    "Ruff.png": {
+      "count": 2,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 10,
+      "level": 1,
+      "hp": 100
+    },
+    "Herman.png": {
+      "count": 1,
+      "rarity": "rare",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Roy.png": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Tremor.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Mikhail.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Prince.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Ton.jpeg": {
+      "count": 1,
+      "rarity": "rare",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Thorin.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Baranov.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Case.png": {
+      "count": 2,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 10,
+      "level": 1,
+      "hp": 100
+    },
+    "Pharao.jpeg": {
+      "count": 1,
+      "rarity": "common",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    },
+    "Aleksander.jpeg": {
+      "count": 1,
+      "rarity": "rare",
+      "favorite": false,
+      "xp": 5,
+      "level": 1,
+      "hp": 100
+    }
+  },
+  "points": 6,
+  "login_streak": 2,
+  "last_login_date": "2025-03-02",
+  "achievements": {
+    "first_pull": true
+  },
   "inventory": {}
 }

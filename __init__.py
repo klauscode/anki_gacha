@@ -48,6 +48,7 @@ RARITIES = {
     "legendary": {"chance": 0.02, "color": "#FFD700"}
 }
 
+
 # Global variables
 husbando_folder = ""
 husbando_images = []
@@ -67,6 +68,44 @@ inventory = {}      # For items like upgrade materials or shop tickets
 # -------------------------------
 # Data loading & saving functions
 # -------------------------------
+
+
+def open_zoom_dialog(image_path):
+    """Open a dialog displaying a larger version of the image."""
+    if not os.path.exists(image_path):
+        tooltip(f"Image not found: {image_path}")
+        return
+    dialog = QDialog(mw)
+    dialog.setWindowTitle("Zoomed Image")
+    dialog.setMinimumSize(600, 600)
+    
+    layout = QVBoxLayout()
+    dialog.setLayout(layout)
+    
+    # Use a scroll area in case the image is larger than the dialog
+    scroll_area = QScrollArea()
+    scroll_area.setWidgetResizable(True)
+    layout.addWidget(scroll_area)
+    
+    content = QWidget()
+    scroll_area.setWidget(content)
+    content_layout = QVBoxLayout()
+    content.setLayout(content_layout)
+    
+    image_label = QLabel()
+    pixmap = QPixmap(image_path)
+    image_label.setPixmap(pixmap)
+    image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    content_layout.addWidget(image_label)
+    
+    close_btn = QPushButton("Close")
+    close_btn.clicked.connect(dialog.accept)
+    content_layout.addWidget(close_btn)
+    
+    dialog.exec()
+
+
+
 def load_addon_data():
     """Load addon configuration and user collection data."""
     global config, user_points, collection, husbando_folder, show_during_review
@@ -299,7 +338,8 @@ def pull_husbando() -> Optional[Tuple[str, str, str]]:
             "rarity": rarity,
             "favorite": False,
             "xp": 0,
-            "level": 1
+            "level": 1,
+            "hp": 100  # initialize HP at 100
         }
     collection[husbando_file]["count"] += 1
     save_collection()
@@ -518,26 +558,60 @@ def open_stats_dialog():
 # Existing Anki Hooks and UI Functions
 # -------------------------------
 def on_card_answered(reviewer, card, ease):
-    """Handle reward points when a card is answered."""
-    global current_streak, user_points
-    rewards = config.get("rewards", DEFAULT_REWARDS)
-    if ease == 1:  # Wrong
-        current_streak = 0
-        add_points(rewards.get("reviewWrong", 0))
-    elif ease == 2:  # Hard
-        current_streak += 1
-        add_points(rewards.get("reviewHard", 1))
-    else:  # Good or Easy
-        current_streak += 1
-        add_points(rewards.get("reviewCorrect", 1))
-    streak_rewards = rewards.get("streak", {})
-    for streak_count, bonus in streak_rewards.items():
-        if current_streak == int(streak_count):
-            add_points(bonus)
-            tooltip(f"🔥 {current_streak} card streak! +{bonus} bonus points!")
-            break
-    # Award XP to the current buddy for reviewing
-    add_buddy_xp(2)
+    """
+    New reward scheme based on answer ease:
+    - Again (1):    -5 HP,   0 XP,  0 points
+    - Hard (2):     -2 HP,  +2 XP, +2 points
+    - Good (3):    +1 HP,  +5 XP, +5 points
+    - Easy (4):   +10 HP, +10 XP, +10 points
+    """
+    global current_husbando  # Declare current_husbando as global
+
+    # Make sure ease is a number, not a Card object
+    ease_value = int(ease) if isinstance(ease, (int, str)) else 0
+    
+    reward_scheme = {
+        1: {"hp": -5, "xp": 0, "points": 0},
+        2: {"hp": -2, "xp": 2, "points": 2},
+        3: {"hp": 1,  "xp": 5, "points": 5},
+        4: {"hp": 10, "xp": 10, "points": 10},
+    }
+    
+    reward = reward_scheme.get(ease_value, {"hp": 0, "xp": 0, "points": 0})
+    tooltip(f"Card answered with ease {ease_value}")
+    
+    # Update current husbando's stats if available
+    if current_husbando:
+        husbando_file, _, _ = current_husbando
+        if husbando_file in collection:
+            husbando = collection[husbando_file]
+            # Update HP and cap between 0 and 100
+            current_hp = husbando.get("hp", 0)
+            new_hp = current_hp + reward["hp"]
+            husbando["hp"] = max(0, min(new_hp, 100))  # Ensure HP stays between 0-100
+            
+            # Check if husbando's HP has reached 0
+            if husbando["hp"] == 0:
+                del collection[husbando_file]
+                tooltip(f"{os.path.splitext(husbando_file)[0]} has died and has been removed from your collection.")
+                current_husbando = None  # Clear current husbando if it dies
+            else:
+                # Update XP
+                husbando["xp"] = husbando.get("xp", 0) + reward["xp"]
+                xp_to_next = husbando["level"] * 100
+                if husbando["xp"] >= xp_to_next:
+                    husbando["xp"] -= xp_to_next
+                    husbando["level"] += 1
+                    tooltip(f"{os.path.splitext(husbando_file)[0]} leveled up to Level {husbando['level']}!")
+                    add_points(50)  # bonus points for leveling up
+                
+                collection[husbando_file] = husbando
+                tooltip(f"{os.path.splitext(husbando_file)[0]} stats: HP {husbando['hp']}, XP {husbando['xp']}")
+            
+            save_collection()
+    
+    # Award user points (gacha currency)
+    add_points(reward["points"])
 
 def setup_menu():
     """Set up the addon menu in Anki."""
@@ -570,7 +644,7 @@ def setup_menu():
     menu.addAction(stats_action)
 
 def open_collection_dialog():
-    """Open the dialog to view husbando collection with a refresh option."""
+    """Open the dialog to view husbando collection with refresh, zoom, and HP display."""
     if not collection:
         showInfo("Your collection is empty! Study to earn points and pull husbandos.")
         return
@@ -590,6 +664,7 @@ def open_collection_dialog():
     scroll_content = QWidget()
     grid_layout = QGridLayout(scroll_content)
     
+    # Sort the collection by rarity order then name
     sorted_collection = sorted(
         collection.items(),
         key=lambda x: (
@@ -605,6 +680,7 @@ def open_collection_dialog():
         card_layout = QVBoxLayout()
         card_widget.setLayout(card_layout)
         image_path = os.path.join(husbando_folder, husbando_file)
+        
         if os.path.exists(image_path):
             image_label = QLabel()
             pixmap = QPixmap(image_path)
@@ -612,20 +688,36 @@ def open_collection_dialog():
             image_label.setPixmap(pixmap)
             image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             card_layout.addWidget(image_label)
+            
+            # Add a Zoom button for the image
+            zoom_btn = QPushButton("Zoom")
+            zoom_btn.clicked.connect(lambda checked, path=image_path: open_zoom_dialog(path))
+            card_layout.addWidget(zoom_btn)
+        
         rarity_color = config.get("rarities", RARITIES)[data["rarity"]]["color"]
         name_label = QLabel(f"<span style='color:{rarity_color};'>{os.path.splitext(husbando_file)[0]}</span>")
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_layout.addWidget(name_label)
+        
         count_label = QLabel(f"Copies: {data['count']}")
         count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_layout.addWidget(count_label)
+        
+        # Display the current HP of the husbando
+        current_hp = data.get("hp", 100)
+        hp_label = QLabel(f"HP: {current_hp}")
+        hp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card_layout.addWidget(hp_label)
+        
         current_btn = QPushButton("Set as Current")
         current_btn.clicked.connect(lambda checked, file=husbando_file, rar=data["rarity"]: set_current_husbando(file, rar))
         card_layout.addWidget(current_btn)
+        
         # Fuse button to upgrade card rarity if enough copies
         fuse_btn = QPushButton("Fuse")
         fuse_btn.clicked.connect(lambda checked, file=husbando_file: fuse_husbando(file))
         card_layout.addWidget(fuse_btn)
+        
         grid_layout.addWidget(card_widget, row, col)
         col += 1
         if col >= max_cols:
@@ -635,7 +727,7 @@ def open_collection_dialog():
     scroll_area.setWidget(scroll_content)
     layout.addWidget(scroll_area)
     
-    # NEW: Add a Refresh button to update the collection view
+    # Refresh button to update the collection view
     refresh_btn = QPushButton("Refresh Collection")
     refresh_btn.clicked.connect(lambda: (dialog.accept(), open_collection_dialog()))
     layout.addWidget(refresh_btn)
@@ -645,6 +737,7 @@ def open_collection_dialog():
     layout.addWidget(close_btn)
     
     dialog.exec()
+
 
 def set_current_husbando(husbando_file, rarity):
     """Set a husbando as the current displayed one."""
@@ -758,176 +851,182 @@ def append_husbando_to_qa(html, card, context):
     if not show_during_review or not current_husbando:
         return html
 
-    buddy_info = ""
-    if current_husbando:
-        husbando_file, _, _ = current_husbando
-        if husbando_file in collection:
-            buddy = collection[husbando_file]
-            xp = buddy.get("xp", 0)
-            level = buddy.get("level", 1)
-            xp_to_next = level * 100
-            buddy_info = f"<p><b>Current Buddy:</b> {os.path.splitext(husbando_file)[0]}<br>Level: {level} (XP: {xp}/{xp_to_next})</p>"
-    
+    # Build buddy info if available
     husbando_file, rarity, file_path = current_husbando
+    if husbando_file in collection:
+        buddy = collection[husbando_file]
+        xp = buddy.get("xp", 0)
+        level = buddy.get("level", 1)
+        xp_to_next = level * 100
+        hp = buddy.get("hp", 100)
+        buddy_info = (f"<p><b>Current Buddy:</b> {os.path.splitext(husbando_file)[0]}<br>"
+                      f"Level: {level} (XP: {xp}/{xp_to_next}) (HP: {hp}/100)</p>")
+    else:
+        buddy_info = ""
+
     if not os.path.exists(file_path):
         tooltip(f"Image file not found: {file_path}")
         return html
+    
     image_src = encode_image_to_base64(file_path)
-    if rarity == "legendary":
-        husbando_html = f"""
-<div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; text-align: center;
-           background: rgba(30, 27, 25, 0.95); border-radius: 20px; padding: 20px;
-           border: 2px solid rgba(245, 158, 11, 0.4); box-shadow: 0 0 35px rgba(245, 158, 11, 0.2);
-           backdrop-filter: blur(12px); width: 340px; color: white; font-family: 'Arial', sans-serif;">
-    
-    <!-- Legendary Badge -->
-    <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
-               background: linear-gradient(45deg, #D97706, #F59E0B); padding: 6px 25px;
-               border-radius: 25px; font-size: 0.9rem; font-weight: 700; letter-spacing: 2px;
-               box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3); border: 1px solid #FCD34D;
-               text-transform: uppercase;">
-        LEGENDARY
-    </div>
+    title = os.path.splitext(husbando_file)[0]
 
+    # Rarity style configuration
+    rarity_styles = {
+        "legendary": {
+            "badge": "LEGENDARY",
+            "badge_bg": "linear-gradient(45deg, #D97706, #F59E0B)",
+            "badge_border": "#FCD34D",
+            "container_border": "#F59E0B",
+            "container_shadow": "rgba(245, 158, 11, 0.3)",
+            "container_bg": "rgba(30, 27, 25, 0.95)",
+            "box_shadow_color": "rgba(245, 158, 11, 0.3)"
+        },
+        "rare": {
+            "badge": "RARE",
+            "badge_bg": "linear-gradient(45deg, #1D4ED8, #3B82F6)",
+            "badge_border": "#60A5FA",
+            "container_border": "#3B82F6",
+            "container_shadow": "rgba(59, 130, 246, 0.25)",
+            "container_bg": "rgba(10, 20, 40, 0.95)",
+            "box_shadow_color": "rgba(59, 130, 246, 0.3)"
+        },
+        "common": {
+            "badge": "COMMON",
+            "badge_bg": "linear-gradient(45deg, #4B5563, #6B7280)",
+            "badge_border": "#9CA3AF",
+            "container_border": "#6B7280",
+            "container_shadow": "rgba(156, 163, 175, 0.1)",
+            "container_bg": "rgba(40, 40, 40, 0.95)",
+            "box_shadow_color": "rgba(0, 0, 0, 0.2)"
+        },
+        "epic": {
+            "badge": "EPIC",
+            "badge_bg": "linear-gradient(45deg, #6D28D9, #8B5CF6)",
+            "badge_border": "#C084FC",
+            "container_border": "#8B5CF6",
+            "container_shadow": "rgba(147, 51, 234, 0.3)",
+            "container_bg": "rgba(30, 0, 30, 0.95)",
+            "box_shadow_color": "rgba(147, 51, 234, 0.3)"
+        }
+    }
+    style = rarity_styles.get(rarity, rarity_styles["common"])
+
+    # Unified HTML template with centered position
+    husbando_html = f"""
+<div style="
+    position: fixed;
+    top: 65%;
+    left: 10%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    text-align: center;
+    background: {style['container_bg']};
+    border-radius: 20px;
+    padding: 20px;
+    border: 2px solid {style['container_border']};
+    box-shadow: 0 0 35px {style['container_shadow']};
+    backdrop-filter: blur(12px);
+    width: 250px;
+    height: 525px;
+    color: white;
+    font-family: 'Arial', sans-serif;">
+    
+    <!-- Badge -->
+    <div style="
+         position: absolute;
+         top: -15px;
+         left: 50%;
+         transform: translateX(-50%);
+         background: {style['badge_bg']};
+         padding: 6px 25px;
+         border-radius: 25px;
+         font-size: 0.9rem;
+         font-weight: 700;
+         letter-spacing: 2px;
+         box-shadow: 0 4px 15px {style['box_shadow_color']};
+         border: 1px solid {style['badge_border']};
+         text-transform: uppercase;">
+         {style['badge']}
+    </div>
+    
     <!-- Title -->
-    <div style="color: #FDE68A; font-weight: 800; margin: 20px 0 15px 0; font-size: 1.4rem;
-                text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 12px rgba(251, 191, 36, 0.4);">
-        {os.path.splitext(husbando_file)[0]}
+    <div style="
+         color: #FDE68A;
+         font-weight: 800;
+         margin: 20px 0 15px 0;
+         font-size: 1.4rem;
+         text-transform: uppercase;
+         letter-spacing: 2px;
+         text-shadow: 0 0 12px rgba(251, 191, 36, 0.4);">
+         {title}
     </div>
-
+    
     <!-- Image Container -->
-    <div style="border-radius: 12px; overflow: hidden; border: 2px solid #F59E0B;
-               box-shadow: 0 0 25px rgba(245, 158, 11, 0.3); position: relative;">
-        <img src="{image_src}" style="width: 100%; height: auto; display: block; transition: transform 0.3s ease;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                   background: linear-gradient(45deg, rgba(30, 27, 25, 0.1), rgba(245, 158, 11, 0.05));">
-        </div>
+    <div style="
+         border-radius: 12px;
+         overflow: hidden;
+         border: 2px solid {style['container_border']};
+         box-shadow: 0 0 25px {style['container_shadow']};
+         position: relative;
+         width: 250px;
+         height: 375px;">
+         <img src="{image_src}" style="
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+              display: block;
+              transition: transform 0.3s ease;">
+         <div style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              background: linear-gradient(45deg, rgba(30,27,25,0.1), rgba(245,158,11,0.05));">
+         </div>
     </div>
-
+    
     <!-- Info Text -->
-    <div style="margin: 18px 0 10px 0; font-size: 0.95rem; color: #FCD34D;
-               line-height: 1.5; padding: 0 12px; font-weight: 500;">
-        {buddy_info}
+    <div style="
+         margin: 18px 0 10px 0;
+         font-size: 0.95rem;
+         color: #FCD34D;
+         line-height: 1.5;
+         padding: 0 12px;
+         font-weight: 500;">
+         {buddy_info}
     </div>
-
+    
     <!-- Golden Sparkles -->
-    <div style="position: absolute; top: 15%; left: -20px; width: 50px; height: 50px;
-               background: radial-gradient(circle, rgba(255,215,0,0.6) 0%, transparent 70%);
-               mix-blend-mode: overlay; transform: rotate(25deg); pointer-events: none;">
+    <div style="
+         position: absolute;
+         top: 15%;
+         left: -20px;
+         width: 50px;
+         height: 50px;
+         background: radial-gradient(circle, rgba(255,215,0,0.6) 0%, transparent 70%);
+         mix-blend-mode: overlay;
+         transform: rotate(25deg);
+         pointer-events: none;">
     </div>
-    <div style="position: absolute; bottom: 25%; right: -20px; width: 40px; height: 40px;
-               background: radial-gradient(circle, rgba(255,215,0,0.5) 0%, transparent 70%);
-               mix-blend-mode: overlay; transform: rotate(-15deg); pointer-events: none;">
-    </div>
-</div>
-    """
-    elif rarity == "rare":
-        husbando_html = f"""
-<div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; text-align: center;
-           background: rgba(10, 20, 40, 0.95); border-radius: 20px; padding: 20px;
-           border: 2px solid rgba(59, 130, 246, 0.4); box-shadow: 0 0 35px rgba(59, 130, 246, 0.2);
-           backdrop-filter: blur(12px); width: 340px; color: white; font-family: 'Arial', sans-serif;">
-    
-    <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
-               background: linear-gradient(45deg, #1D4ED8, #3B82F6); padding: 6px 25px;
-               border-radius: 25px; font-size: 0.9rem; font-weight: 700; letter-spacing: 2px;
-               box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); border: 1px solid #60A5FA;">
-        RARE
-    </div>
-
-    <div style="color: #BFDBFE; font-weight: 800; margin: 20px 0 15px 0; font-size: 1.4rem;
-                text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 12px rgba(191, 219, 254, 0.3);">
-        {os.path.splitext(husbando_file)[0]}
-    </div>
-
-    <div style="border-radius: 12px; overflow: hidden; border: 2px solid #3B82F6;
-               box-shadow: 0 0 25px rgba(59, 130, 246, 0.25); position: relative;">
-        <img src="{image_src}" style="width: 100%; height: auto; display: block;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                   background: linear-gradient(45deg, rgba(10, 20, 40, 0.1), rgba(59, 130, 246, 0.1));">
-        </div>
-    </div>
-
-    <div style="margin: 18px 0 10px 0; font-size: 0.95rem; color: #93C5FD;
-               line-height: 1.5; padding: 0 12px; font-weight: 500;">
-        {buddy_info}
+    <div style="
+         position: absolute;
+         bottom: 25%;
+         right: -20px;
+         width: 40px;
+         height: 40px;
+         background: radial-gradient(circle, rgba(255,215,0,0.5) 0%, transparent 70%);
+         mix-blend-mode: overlay;
+         transform: rotate(-15deg);
+         pointer-events: none;">
     </div>
 </div>
-        """
-    elif rarity == "common":
-        husbando_html = f"""
-<div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; text-align: center;
-           background: rgba(40, 40, 40, 0.95); border-radius: 20px; padding: 20px;
-           border: 2px solid rgba(156, 163, 175, 0.4); box-shadow: 0 0 25px rgba(156, 163, 175, 0.15);
-           backdrop-filter: blur(12px); width: 340px; color: white; font-family: 'Arial', sans-serif;">
-    
-    <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
-               background: linear-gradient(45deg, #4B5563, #6B7280); padding: 6px 25px;
-               border-radius: 25px; font-size: 0.9rem; font-weight: 700; letter-spacing: 2px;
-               box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); border: 1px solid #9CA3AF;">
-        COMMON
-    </div>
-
-    <div style="color: #E5E7EB; font-weight: 800; margin: 20px 0 15px 0; font-size: 1.4rem;
-                text-transform: uppercase; letter-spacing: 2px;">
-        {os.path.splitext(husbando_file)[0]}
-    </div>
-
-    <div style="border-radius: 12px; overflow: hidden; border: 2px solid #6B7280;
-               box-shadow: 0 0 15px rgba(156, 163, 175, 0.1); position: relative;">
-        <img src="{image_src}" style="width: 100%; height: auto; display: block;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                   background: linear-gradient(45deg, rgba(40, 40, 40, 0.1), rgba(156, 163, 175, 0.05));">
-        </div>
-    </div>
-
-    <div style="margin: 18px 0 10px 0; font-size: 0.95rem; color: #D1D5DB;
-               line-height: 1.5; padding: 0 12px; font-weight: 500;">
-        {buddy_info}
-    </div>
-</div>
-        """
-    elif rarity == "epic":
-        husbando_html = f"""
-        <div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; text-align: center;
-           background: rgba(30, 0, 30, 0.95); border-radius: 20px; padding: 20px;
-           border: 2px solid rgba(168, 85, 247, 0.4); box-shadow: 0 0 35px rgba(147, 51, 234, 0.25);
-           backdrop-filter: blur(12px); width: 340px; color: white; font-family: 'Arial', sans-serif;">
-    
-    <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
-               background: linear-gradient(45deg, #6D28D9, #8B5CF6); padding: 6px 25px;
-               border-radius: 25px; font-size: 0.9rem; font-weight: 700; letter-spacing: 2px;
-               box-shadow: 0 4px 15px rgba(147, 51, 234, 0.3); border: 1px solid #C084FC;">
-        EPIC
-    </div>
-
-    <div style="color: #E9D8FD; font-weight: 800; margin: 20px 0 15px 0; font-size: 1.4rem;
-                text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 12px rgba(199, 210, 254, 0.3);">
-        {os.path.splitext(husbando_file)[0]}
-    </div>
-
-    <div style="border-radius: 12px; overflow: hidden; border: 2px solid #8B5CF6;
-               box-shadow: 0 0 25px rgba(147, 51, 234, 0.3); position: relative;">
-        <img src="{image_src}" style="width: 100%; height: auto; display: block;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                   background: linear-gradient(45deg, rgba(30, 0, 30, 0.1), rgba(147, 51, 234, 0.1));">
-        </div>
-    </div>
-
-    <div style="margin: 18px 0 10px 0; font-size: 0.95rem; color: #C4B5FD;
-               line-height: 1.5; padding: 0 12px; font-weight: 500;">
-        {buddy_info}
-    </div>
-
-    <div style="position: absolute; top: 15%; left: -20px; width: 50px; height: 50px;
-               background: radial-gradient(circle, rgba(216, 180, 254, 0.4) 0%, transparent 70%);
-               mix-blend-mode: lighten; transform: rotate(25deg); pointer-events: none;">
-    </div>
-</div>
-        """
+"""
     return html + husbando_html
 
-def handle_answer(card, ease, reviewer):
+def handle_answer(reviewer, card, ease):
+    tooltip("handle_answer was called!")  # Debug message
     on_card_answered(reviewer, card, ease)
 
 # -------------------------------
@@ -943,5 +1042,9 @@ def init():
     from aqt import gui_hooks
     gui_hooks.card_will_show.append(append_husbando_to_qa)
     gui_hooks.reviewer_did_answer_card.append(handle_answer)
+    gui_hooks.reviewer_did_answer_card.append(handle_answer)
+
 
 init()
+
+
